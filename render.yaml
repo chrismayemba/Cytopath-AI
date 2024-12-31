@@ -3,7 +3,7 @@ services:
     name: cytopath-ai
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn web_app.main:app --bind 0.0.0.0:$PORT --workers 4 --worker-class uvicorn.workers.UvicornWorker --timeout 120
+    startCommand: cd web_app && gunicorn main:app --bind 0.0.0.0:$PORT --workers 4 --worker-class uvicorn.workers.UvicornWorker --timeout 120
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
