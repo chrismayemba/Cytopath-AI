@@ -10,5 +10,5 @@ services:
       - key: PORT
         value: 8000
       - key: PYTHONPATH
-        value: .
+        value: /opt/render/project/src:/opt/render/project/src/web_app
     healthCheckPath: /health 
