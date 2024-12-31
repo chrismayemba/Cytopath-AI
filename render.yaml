@@ -4,7 +4,7 @@ services:
     env: python
     region: frankfurt
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn web_app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120
+    startCommand: cd web_app && gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -12,6 +12,8 @@ services:
         value: 8000
       - key: ENVIRONMENT
         value: production
+      - key: PYTHONPATH
+        value: .
     healthCheckPath: /health
     autoDeploy: false
     plan: starter
