@@ -4,6 +4,14 @@ uvicorn==0.24.0
 python-multipart==0.0.6
 pydantic==2.5.1
 python-dotenv==1.0.0
+gunicorn==21.2.0
+jinja2==3.1.2
+starlette==0.27.0
+
+# Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
 
 # Deep Learning
 torch==2.1.1
@@ -12,7 +20,7 @@ efficientnet-pytorch==0.7.1
 captum==0.6.0
 
 # Image Processing
-opencv-python==4.8.1.78
+opencv-python-headless==4.8.1.78
 Pillow==10.1.0
 scikit-image==0.21.0
 
@@ -34,7 +42,6 @@ plotly==5.18.0
 # Documentation and Reporting
 reportlab==4.0.7
 openpyxl==3.1.2
-python-jose==3.3.0
 
 # Development Tools
 black==23.11.0
@@ -51,3 +58,8 @@ pytest-mock==3.12.0
 # Progress Bars and Logging
 tqdm==4.66.1
 loguru==0.7.2
+
+# Production
+uvicorn[standard]==0.24.0
+aiofiles==23.2.1
+python-json-logger==2.0.7
