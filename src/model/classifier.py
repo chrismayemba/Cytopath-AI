@@ -7,25 +7,61 @@ import os
 import numpy as np
 from PIL import Image
 import cv2
+from efficientnet_pytorch import EfficientNet
+
+class ChannelAttention(nn.Module):
+    def __init__(self, in_channels: int, ratio: int = 8):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(in_channels, in_channels // ratio),
+            nn.ReLU(),
+            nn.Linear(in_channels // ratio, in_channels)
+        )
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, c, _, _ = x.size()
+        avg_out = self.fc(self.avg_pool(x).view(b, c))
+        max_out = self.fc(self.max_pool(x).view(b, c))
+        out = torch.sigmoid(avg_out + max_out).view(b, c, 1, 1)
+        return out * x
+
+class SpatialAttention(nn.Module):
+    def __init__(self, kernel_size: int = 7):
+        super().__init__()
+        self.conv = nn.Conv2d(2, 1, kernel_size=kernel_size, padding=kernel_size//2)
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        x_cat = torch.cat([avg_out, max_out], dim=1)
+        out = torch.sigmoid(self.conv(x_cat))
+        return out * x
 
 class CervicalLesionClassifier(nn.Module):
     def __init__(self, num_classes: int = 5):
-        """Initialize the model"""
+        """Initialize the model with EfficientNet-B4 and attention mechanisms"""
         super().__init__()
         
         # Set device
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # Load pre-trained EfficientNet
-        self.base_model = models.efficientnet_b0(pretrained=True)
+        # Load pre-trained EfficientNet-B4
+        self.base_model = EfficientNet.from_pretrained('efficientnet-b4')
+        in_features = self.base_model._fc.in_features
+        self.base_model._fc = nn.Identity()
         
-        # Modify classifier
-        num_ftrs = self.base_model.classifier[1].in_features
-        self.base_model.classifier = nn.Sequential(
-            nn.Dropout(p=0.3),
-            nn.Linear(num_ftrs, 512),
+        # Add attention mechanisms
+        self.channel_attention = ChannelAttention(in_features)
+        self.spatial_attention = SpatialAttention()
+        
+        # Classifier head
+        self.classifier = nn.Sequential(
+            nn.Dropout(p=0.4),
+            nn.Linear(in_features, 512),
             nn.ReLU(),
-            nn.Dropout(p=0.2),
+            nn.Dropout(p=0.3),
             nn.Linear(512, 256),
             nn.ReLU(),
             nn.Linear(256, num_classes)
@@ -36,7 +72,7 @@ class CervicalLesionClassifier(nn.Module):
         
         # Define image transforms
         self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
+            transforms.Resize((380, 380)),  # EfficientNet-B4 optimal size
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],
@@ -45,7 +81,6 @@ class CervicalLesionClassifier(nn.Module):
         ])
         
         self.softmax = nn.Softmax(dim=1)
-        
         self._num_classes = num_classes
         
     @property
@@ -53,7 +88,18 @@ class CervicalLesionClassifier(nn.Module):
         return self._num_classes
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.base_model(x)
+        # Base network features
+        x = self.base_model.extract_features(x)
+        
+        # Apply attention
+        x = self.channel_attention(x)
+        x = self.spatial_attention(x)
+        
+        # Global pooling and classification
+        x = self.base_model._avg_pooling(x)
+        x = x.flatten(start_dim=1)
+        x = self.classifier(x)
+        
         return self.softmax(x)
     
     def preprocess_image(self, image: np.ndarray) -> torch.Tensor:
@@ -125,7 +171,7 @@ class BethesdaClassifier:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = CervicalLesionClassifier().to(self.device)
         self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
+            transforms.Resize((380, 380)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                               std=[0.229, 0.224, 0.225])
@@ -210,7 +256,7 @@ class BethesdaClassifier:
                 'confidence': float(probs[pred_class_idx]),
                 'probabilities': predictions
             }
-    
+
     def predict_batch(self, images: List[Union[np.ndarray, torch.Tensor]],
                      batch_size: int = 32) -> List[Dict[str, Any]]:
         """Predict classes for a batch of images"""
